@@ -1,0 +1,21 @@
+#!/bin/bash
+
+PROJECT_PATH="$(dirname "$0")"/..
+
+CLOJURE_DIR=$PROJECT_PATH/lib
+CLOJURE_JAR=$CLOJURE_DIR/clojure-slim.jar
+
+# Clojure JAR path starts here
+CLOJURE_JP=\
+$CLOJURE_JAR:\
+$PROJECT_PATH/src:\
+.   
+# Clojure JAR path ends here
+
+
+if [ $# -eq 0 ]; then 
+    java -Xrunhprof:cpu=samples,file=log.txt,depth=100 -Xms256M -Xmx512M -server -cp $CLOJURE_JP clojure.lang.Repl
+else
+    java -Xms256M -Xmx512M -server -cp $CLOJURE_JP clojure.lang.Script "$@"
+fi
+

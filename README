@@ -1,0 +1,20 @@
+
+This solution is written in Clojure and has two main parts:
+
+src/loneclojurian/ovm.clj - a VM implementation
+src/loneclojurian/sim.clj - sim-related functions
+
+To run this solution you need a unix-like OS with bash and Java 1.6
+(1.5 might work, haven't tried).
+
+In this directory just run:
+
+./bin/clj problem1.clj
+
+And wait. :)
+
+The VM is quite slow, it needs around 30 seconds for one task.
+
+When all the tasks are finished the solutions can be found in the
+solutions directory.
+
