@@ -14,8 +14,8 @@ $PROJECT_PATH/src:\
 
 
 if [ $# -eq 0 ]; then 
-    java -Xrunhprof:cpu=samples,file=log.txt,depth=100 -Xms256M -Xmx512M -server -cp $CLOJURE_JP clojure.lang.Repl
+    java -Xms256M -Xmx512M -server -cp $CLOJURE_JP clojure.lang.Repl
 else
-    java -Xms256M -Xmx512M -server -cp $CLOJURE_JP clojure.lang.Script "$@"
+    java -Xrunhprof:cpu=samples,file=log.txt,depth=100 -Xms256M -Xmx512M -server -cp $CLOJURE_JP clojure.lang.Script "$@"
 fi
 

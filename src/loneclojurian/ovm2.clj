@@ -8,7 +8,7 @@
 (def data (make-array Double/TYPE 16384))
 (def input-ports (make-array Double/TYPE 16384))
 (def output-ports (make-array Double/TYPE 16384))
-(def program (atom []))
+(def program (atom ()))
 
 (defn run-cycle
   "Run one iteration of the whole program"
@@ -40,23 +40,23 @@
             imm (.substring bits 8 11)
             r1 (.substring bits 18 32)]
           (cond
-            (= opcode "0000") (fn [] nil)
+            (= opcode "0000") ()
             (and (= opcode "0001") (= imm "000"))
-              (fn [] (aset-boolean status-reg 0 (< #^Double (aget data (Integer/parseInt r1 2)) 0.)))
+               `(aset-boolean status-reg 0 (< #^Double (aget data ~(Integer/parseInt r1 2)) 0.))
             (and (= opcode "0001") (= imm "001"))
-              (fn [] (aset-boolean status-reg 0 (<= #^Double (aget data (Integer/parseInt r1 2)) 0.)))
+               `(aset-boolean status-reg 0 (<= #^Double (aget data ~(Integer/parseInt r1 2)) 0.))
             (and (= opcode "0001") (= imm "010"))
-              (fn [] (aset-boolean status-reg 0 (= #^Double (aget data (Integer/parseInt r1 2)) 0.)))
+               `(aset-boolean status-reg 0 (= #^Double (aget data ~(Integer/parseInt r1 2)) 0.))
             (and (= opcode "0001") (= imm "011"))
-              (fn [] (aset-boolean status-reg 0 (>= #^Double (aget data (Integer/parseInt r1 2)) 0.)))
+               `(aset-boolean status-reg 0 (>= #^Double (aget data ~(Integer/parseInt r1 2)) 0.))
             (and (= opcode "0001") (= imm "100"))
-              (fn [] (aset-boolean status-reg 0 (> #^Double (aget data (Integer/parseInt r1 2)) 0.)))
+               `(aset-boolean status-reg 0 (> #^Double (aget data ~(Integer/parseInt r1 2)) 0.))
             (= opcode "0010")
-              (fn [] (aset-double data frame-num (Math/sqrt #^Double (aget data (Integer/parseInt r1 2)))))  
+               `(aset-double data ~frame-num (Math/sqrt #^Double (aget data ~(Integer/parseInt r1 2))))  
             (= opcode "0011")
-              (fn [] (aset-double data frame-num (aget data (Integer/parseInt r1 2))))  
+               `(aset-double data ~frame-num (aget data ~(Integer/parseInt r1 2)))  
             (= opcode "0100")
-              (fn [] (aset-double data frame-num (aget input-ports (Integer/parseInt r1 2))))
+               `(aset-double data ~frame-num (aget input-ports ~(Integer/parseInt r1 2)))
             true (str bits " - single arg instr not found!" )))
       ;; decode two-arg instructions
       (let [opcode (.substring bits 0 4)
@@ -64,25 +64,26 @@
             r2 (.substring bits 18 32)]
         (cond
           (= opcode "0001")
-            (fn [] (aset-double data frame-num (+ (aget data (Integer/parseInt r1 2))
-                                                  (aget data (Integer/parseInt r2 2)))))
+               `(aset-double data ~frame-num (+ (aget data ~(Integer/parseInt r1 2))
+                                               (aget data ~(Integer/parseInt r2 2))))
           (= opcode "0010")
-            (fn [] (aset-double data frame-num (- (aget data (Integer/parseInt r1 2))
-                                                  (aget data (Integer/parseInt r2 2)))))
+               `(aset-double data ~frame-num (- (aget data ~(Integer/parseInt r1 2))
+                                               (aget data ~(Integer/parseInt r2 2))))
           (= opcode "0011")
-            (fn [] (aset-double data frame-num (* (aget data (Integer/parseInt r1 2))
-                                                  (aget data (Integer/parseInt r2 2)))))
+               `(aset-double data ~frame-num (* (aget data ~(Integer/parseInt r1 2))
+                                                (aget data ~(Integer/parseInt r2 2))))
           (= opcode "0100")
-            (fn [] (if (= (aget data (Integer/parseInt r2 2)) 0.0)
-                     (aset-double data frame-num 0.0)
-                     (aset-double data frame-num (/ (aget data (Integer/parseInt r1 2))
-                                                    (aget data (Integer/parseInt r2 2))))))
+               `(if (= (aget data ~(Integer/parseInt r2 2)) 0.0)
+                  (aset-double data ~frame-num 0.0)
+                  (aset-double data ~frame-num (/ (aget data ~(Integer/parseInt r1 2))
+                                                  (aget data ~(Integer/parseInt r2 2)))))
           (= opcode "0101")
-            (fn [] (aset-double output-ports (Integer/parseInt r1 2) (aget data (Integer/parseInt r2 2))))
+               `(aset-double output-ports ~(Integer/parseInt r1 2)
+                               (aget data ~(Integer/parseInt r2 2)))
           (= opcode "0110")
-            (fn [] (if (aget status-reg 0)
-                     (aset-double data frame-num (aget data (Integer/parseInt r1 2)))
-                     (aset-double data frame-num (aget data (Integer/parseInt r2 2)))))
+               `(if (aget status-reg 0)
+                  (aset-double data ~frame-num (aget data ~(Integer/parseInt r1 2)))
+                  (aset-double data ~frame-num (aget data ~(Integer/parseInt r2 2))))
           true (str bits " - two arg instr not found!"))))))
 
 (defn fill-data
@@ -94,7 +95,7 @@
   "Fill the machine instruction storage on address frame-number with a function
    pointer"
   [frame-number instruction-code]
-  (swap! program assoc frame-number (decode-instruction instruction-code frame-number)))
+  (reset! program (cons (decode-instruction instruction-code frame-number) @program)))
 
 (defn fill-instruction-and-data
   "Simultaneously fill one address of instruction and data storage"
@@ -136,9 +137,12 @@
   "Initialize the machine and load the core file."
   [core-filename]
   (aset-boolean status-reg 0 false)
-  (reset! program (apply vector (take 16384 (repeat (fn [] nil)))))
+  (reset! program `())
   (dotimes [x 16384] (aset-double data x 0.0))
   (dotimes [x 16384] (aset-double input-ports x 0.0))
   (dotimes [x 16384] (aset-double output-ports x 0.0))
-  (load-core-file core-filename))
+  (load-core-file core-filename)
+  (let [instructions (reverse @program)
+        prg-one `(fn [] (do ~@instructions))]
+    (eval prg-one)))
 
