@@ -1,26 +1,18 @@
 (ns loneclojurian.ovm2
   (:import (java.io File RandomAccessFile)
            (java.nio ByteBuffer ByteOrder)
-           (java.lang.reflect Array)))
+           (loneclojurian Machine)))
 
 (def *trace* false)
 
-(def status-reg (make-array Boolean/TYPE 1))
-(def data (make-array Double/TYPE 16384))
-(def input-ports (make-array Double/TYPE 16384))
-(def output-ports (make-array Double/TYPE 16384))
 (def program (atom ()))
 
-(defn run-cycle
-  "Run one iteration of the whole program"
-  [prog]
-  (dotimes [x 16384]
-    ((prog x))))
+(def *machine* (Machine.))
 
 (def *frame-size* 12)
 
 ;; Simple binary-handling functions... convert 32-bit integer into a
-;; string of 0's ans 1's and operate on it using string manipulation functions
+;; string of 0's and 1's and operate on it using string manipulation functions
 (defn to-binary-string
   "Convert an integer to a binary string and add zero padding"
   [#^Integer int-value]
@@ -43,21 +35,21 @@
           (cond
             (= opcode "0000") ()
             (and (= opcode "0001") (= imm "000"))
-               `(aset-boolean status-reg 0 (< #^Double (Array/getDouble data ~(Integer/parseInt r1 2)) 0.))
+                  `(Machine/cmpltz ~(Integer/parseInt r1 2))
             (and (= opcode "0001") (= imm "001"))
-               `(aset-boolean status-reg 0 (<= #^Double (Array/getDouble data ~(Integer/parseInt r1 2)) 0.))
+                  `(Machine/cmplez ~(Integer/parseInt r1 2))
             (and (= opcode "0001") (= imm "010"))
-               `(aset-boolean status-reg 0 (= #^Double (Array/getDouble data ~(Integer/parseInt r1 2)) 0.))
+                  `(Machine/cmpeqz ~(Integer/parseInt r1 2))
             (and (= opcode "0001") (= imm "011"))
-               `(aset-boolean status-reg 0 (>= #^Double (Array/getDouble data ~(Integer/parseInt r1 2)) 0.))
+                  `(Machine/cmpgez ~(Integer/parseInt r1 2))
             (and (= opcode "0001") (= imm "100"))
-               `(aset-boolean status-reg 0 (> #^Double (Array/getDouble data ~(Integer/parseInt r1 2)) 0.))
+                  `(Machine/cmpgtz ~(Integer/parseInt r1 2))
             (= opcode "0010")
-               `(aset-double data ~frame-num (Math/sqrt #^Double (Array/getDouble data ~(Integer/parseInt r1 2))))  
+                  `(Machine/sqrt ~frame-num ~(Integer/parseInt r1 2))
             (= opcode "0011")
-               `(aset-double data ~frame-num (Array/getDouble data ~(Integer/parseInt r1 2)))  
+                  `(Machine/copy ~frame-num ~(Integer/parseInt r1 2))
             (= opcode "0100")
-               `(aset-double data ~frame-num (Array/getDouble input-ports ~(Integer/parseInt r1 2)))
+                  `(Machine/input ~frame-num ~(Integer/parseInt r1 2))
             true (str bits " - single arg instr not found!" )))
       ;; decode two-arg instructions
       (let [opcode (.substring bits 0 4)
@@ -65,32 +57,23 @@
             r2 (.substring bits 18 32)]
         (cond
           (= opcode "0001")
-               `(aset-double data ~frame-num (+ (Array/getDouble data ~(Integer/parseInt r1 2))
-                                               (Array/getDouble data ~(Integer/parseInt r2 2))))
+                  `(Machine/add ~frame-num ~(Integer/parseInt r1 2) ~(Integer/parseInt r2 2))
           (= opcode "0010")
-               `(aset-double data ~frame-num (- (Array/getDouble data ~(Integer/parseInt r1 2))
-                                               (Array/getDouble data ~(Integer/parseInt r2 2))))
+                  `(Machine/sub ~frame-num ~(Integer/parseInt r1 2) ~(Integer/parseInt r2 2))
           (= opcode "0011")
-               `(aset-double data ~frame-num (* (Array/getDouble data ~(Integer/parseInt r1 2))
-                                                (Array/getDouble data ~(Integer/parseInt r2 2))))
+                  `(Machine/mult ~frame-num ~(Integer/parseInt r1 2) ~(Integer/parseInt r2 2))
           (= opcode "0100")
-               `(if (= (Array/getDouble data ~(Integer/parseInt r2 2)) 0.0)
-                  (aset-double data ~frame-num 0.0)
-                  (aset-double data ~frame-num (/ (Array/getDouble data ~(Integer/parseInt r1 2))
-                                                  (Array/getDouble data ~(Integer/parseInt r2 2)))))
+                  `(Machine/div ~frame-num ~(Integer/parseInt r1 2) ~(Integer/parseInt r2 2))
           (= opcode "0101")
-               `(aset-double output-ports ~(Integer/parseInt r1 2)
-                               (Array/getDouble data ~(Integer/parseInt r2 2)))
+                  `(Machine/output ~(Integer/parseInt r1 2) ~(Integer/parseInt r2 2))
           (= opcode "0110")
-               `(if (Array/getBoolean status-reg 0)
-                  (aset-double data ~frame-num (Array/getDouble data ~(Integer/parseInt r1 2)))
-                  (aset-double data ~frame-num (Array/getDouble data ~(Integer/parseInt r2 2))))
+                  `(Machine/phi ~frame-num ~(Integer/parseInt r1 2) ~(Integer/parseInt r2 2))
           true (str bits " - two arg instr not found!"))))))
 
 (defn fill-data
   "Fill the machine data storage on address frame-number with a given data value"
-  [frame-number #^Double new-data]
-  (aset-double data frame-number new-data))
+  [#^Integer frame-number #^Double new-data]
+  (Machine/set_data frame-number new-data))
 
 (defn fill-instruction
   "Fill the machine instruction storage on address frame-number with a function
@@ -137,13 +120,8 @@
 (defn init-ovm
   "Initialize the machine and load the core file."
   [core-filename]
-  (aset-boolean status-reg 0 false)
-  (reset! program `())
-  (dotimes [x 16384] (aset-double data x 0.0))
-  (dotimes [x 16384] (aset-double input-ports x 0.0))
-  (dotimes [x 16384] (aset-double output-ports x 0.0))
+  (def *machine* (Machine.))
   (load-core-file core-filename)
   (let [instructions (reverse @program)
         prg-one `(fn [] (do ~@instructions))]
     (eval prg-one)))
-

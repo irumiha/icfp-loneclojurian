@@ -1,5 +1,5 @@
-(ns loneclojurian.sim
-  (:require [loneclojurian.ovm :as ovm])
+(ns loneclojurian.sim2
+  (:require [loneclojurian.ovm2 :as ovm2])
   (:import (java.io File RandomAccessFile)
            (java.nio ByteBuffer ByteOrder)))
 
@@ -42,25 +42,30 @@
 
 (defn change-speed
   "Apply delta-V command for one cycle."
-  [machine #^Double delta-v-x #^Double delta-v-y]
-  (let [[_ _ old-delta-v-x old-delta-v-y] (subvec (:input-ports machine) 0 4)]
+  [engine-run #^Double delta-v-x #^Double delta-v-y]
+  (let [old-delta-v-x (aget ovm2/input-ports 2)
+        old-delta-v-y (aget ovm2/input-ports 3)]
     (if (or (not (= old-delta-v-x delta-v-x ))
             (not (= old-delta-v-y delta-v-y)))
-      (dosync (ref-set *thruster-trace* (conj @*thruster-trace* (conj [@*timestamp*]
-                                                                      (if (not (= old-delta-v-x delta-v-x ))
-                                                                        [2 delta-v-x]
-                                                                        nil)
-                                                                      (if (not (= old-delta-v-y delta-v-y))
-                                                                        [3 delta-v-y]
-                                                                        nil)))))))
-  (new-timestamp)
-  (ovm/run-cycle (assoc machine :input-ports
-                        (apply conj [0.0 0.0 delta-v-x delta-v-y] (subvec (:input-ports machine) 4)))))
+      (dosync (ref-set *thruster-trace*
+                       (conj @*thruster-trace*
+                             (conj [@*timestamp*]
+                                   (if (not (= old-delta-v-x delta-v-x ))
+                                     [2 delta-v-x]
+                                     nil)
+                                   (if (not (= old-delta-v-y delta-v-y))
+                                     [3 delta-v-y]
+                                     nil)))))))
+  (aset-double ovm2/input-ports 2 delta-v-x)
+  (aset-double ovm2/input-ports 3 delta-v-y)
+  (engine-run)
+  (new-timestamp))
 
 (defn quiet-run
   "Run one cycle of the sim with actuator ports set to 0.0"
-  [machine]
-  (let [[_ _ old-delta-v-x old-delta-v-y] (subvec (:input-ports machine) 0 4)]
+  [engine-run]
+  (let [old-delta-v-x (aget ovm2/input-ports 2)
+        old-delta-v-y (aget ovm2/input-ports 3)]
     (if (or (not (= old-delta-v-x 0.0 ))
             (not (= old-delta-v-y 0.0)))
       (dosync (ref-set *thruster-trace*
@@ -72,24 +77,26 @@
                                    (if (not (= old-delta-v-y 0.0))
                                      [3 0.0]
                                      nil)))))))
-  (new-timestamp)
-  (ovm/run-cycle (assoc machine :input-ports
-                        (apply conj [0.0 0.0 0.0 0.0] (subvec (:input-ports machine) 4)))))
+  (aset-double ovm2/input-ports 2 0.0)
+  (aset-double ovm2/input-ports 3 0.0)
+  (engine-run)
+  (new-timestamp))
 
 (defn score
   "Read the current score"
-  [machine]
-  ((:output-ports machine) 0))
+  []
+  (aget ovm2/output-ports 0))
 
 (defn remaining-fuel
   "Read the amount of fuel left"
-  [machine]
-  ((:output-ports machine) 0))
+  []
+  (aget ovm2/output-ports 1))
 
 (defn position
   "Read the current position and calculate distance from Earth, return everything as a vector"
-  [machine]
-  (let [[x-pos y-pos] (subvec (:output-ports machine) 2 4)
+  []
+  (let [x-pos (aget ovm2/output-ports 2)
+        y-pos (aget ovm2/output-ports 3)
         r (Math/sqrt (+ (* x-pos x-pos) (* y-pos y-pos)))]
     [x-pos y-pos r]))
 
@@ -144,15 +151,17 @@
    quiet-run :   run one sim iteration with thrusters turned off
    change-speed: run one sim iteration with thrusters set to achieve desired delta-v
   "
-  [machine #^Double scenario-id take-game-state select-and-execute-action conditions-satisfied]
+  [engine #^Double scenario-id take-game-state select-and-execute-action conditions-satisfied]
   (dosync (ref-set *timestamp* 0)
           (ref-set *thruster-trace* [[0 [16000 scenario-id]]]))
-  (loop [current-machine (quiet-run (update-in machine [:input-ports] assoc 16000 scenario-id))
-         game-state (take-game-state current-machine)]
+  (aset-double ovm2/input-ports 16000 scenario-id)
+  (quiet-run engine)
+  (loop [game-state (take-game-state ovm2/output-ports ovm2/input-ports)]
     (if (conditions-satisfied game-state)
       [@*thruster-trace* game-state]
-      (recur (select-and-execute-action current-machine game-state)
-             (take-game-state current-machine)))))
+      (recur (do
+               (select-and-execute-action engine game-state)
+               (take-game-state ovm2/output-ports ovm2/input-ports))))))
 
 ;; This is ugly, has a lot of duplicated code and should be rewritten
 ;; to use the game-loop function defined above... With more time... :)
@@ -244,4 +253,6 @@
           (println "Failure :(")
           (recur (quiet-run sim-state)
                  (inc runs)))))))
+
+
 
